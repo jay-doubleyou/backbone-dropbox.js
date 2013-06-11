@@ -47,3 +47,19 @@ and authenticate the user
 
         // Init/Start your app.
     });
+    
+Your models and collections will now sync with your dropbox.
+
+    var myModel = Backbone.Model.extend({
+        store: 'myModel',
+        defaults: {
+            // ...
+        }
+    });
+    
+    var myCollection = Backbone.Collection.extend({
+        model: myModel,
+        store: 'myModel'
+    });
+    
+The last thing you have to do is create an empty [myModel.json](https://raw.github.com/jay-doubleyou/backbone-dropbox.js/master/myModel.json) in your app dropbox folder.
