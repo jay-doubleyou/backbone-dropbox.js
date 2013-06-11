@@ -1,7 +1,7 @@
 backbone-dropbox.js
 ===================
 
-backbone.sync adapter [for dropbox.js](https://github.com/dropbox/dropbox-js).
+backbone-dropbox.js is a sync adapter for [dropbox.js](https://github.com/dropbox/dropbox-js). Using this sync, backbone will CRUD your models in a JSON file within your dropbox. This can be used for single user applications e.g. todo-list or feed reader.
 
 Usage
 -----
