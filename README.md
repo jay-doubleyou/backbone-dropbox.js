@@ -24,11 +24,11 @@ If your app runs inside the browser, you have to [encrypt the API key](https://d
 
 Now you have to authenticate. Therefor dropbox.js provides several [authentication methods](https://github.com/dropbox/dropbox-js/blob/master/doc/auth_drivers.md). For browser apps it's applicable to use
 
-via Redirect (user leaves your app and comes back):
+Redirect (user leaves your app and comes back):
 
     drpbxClient.authDriver(new Dropbox.Drivers.Redirect());
 
-or via Popup:
+or Popup:
 
     drpbxClient.authDriver(new Dropbox.Drivers.Popup({
         receiverUrl: "https://url.to/oauth_receiver.html",
