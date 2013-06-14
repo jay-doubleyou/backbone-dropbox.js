@@ -54,7 +54,7 @@
     var _writeToFile = _.debounce(function(filename) {
 
         var d = $.Deferred();
-        dropboxClient.writeFile(filename, JSON.stringify(contentCache), function(error, stat) {
+        dropboxClient.writeFile(filename, JSON.stringify(contentCache[filename]), function(error, stat) {
 
             if (error) {
                 console.log('error writing', filename, error);
@@ -70,7 +70,7 @@
     }, 600);
 
 
-    var contentCache = null;
+    var contentCache = [];
     var defaultEmptyJson = {
         current:0,
         items:[]
@@ -82,8 +82,9 @@
         opts = opts || {};
 
         var d = $.Deferred();
-        if ((opts.resetCache === void 0  || opts.resetCache === false) &&
-            contentCache    !== null) {
+        if ((opts.resetCache === void 0  ||
+            opts.resetCache === false) &&
+            contentCache[filename] !== void 0) {
             d.resolve();
         } else {
 
@@ -97,7 +98,7 @@
                     }
 
                     //save to cache
-                    contentCache = data;
+                    contentCache[filename] = data;
 
                     d.resolve();
                 }
@@ -118,7 +119,7 @@
     };
 
 
-    function _read(model, options) {
+    function _read(store, model, options) {
 
         // Nothing to do because no model id given.
         if (model instanceof Backbone.Model &&
@@ -127,12 +128,12 @@
         }
 
         //no content
-        if (contentCache.current === 0) {
+        if (contentCache[store].current === 0) {
             return _syncModel('read', model, [], options);
         }
 
         //get items
-        var items = contentCache.items;
+        var items = contentCache[store].items;
 
         //handle if model is collection
         if (model instanceof Backbone.Collection) {
@@ -157,10 +158,10 @@
         return _syncModel('read', model, item, options);
     }
 
-    function _create(model, options) {
+    function _create(store, model, options) {
 
-        var new_id = contentCache.current;
-        var modelWithId = _.findWhere(contentCache.items, {
+        var new_id = contentCache[store].current;
+        var modelWithId = _.findWhere(contentCache[store].items, {
             id : new_id
         });
 
@@ -171,16 +172,16 @@
         model.set('id', new_id);
 
         var modelData = model.toJSON();
-        contentCache.items.push(modelData);
+        contentCache[store].items.push(modelData);
 
         return _syncModel('read', model, modelData, options);
     }
 
-    function _update(model, options) {
+    function _update(store, model, options) {
 
         var modelData = model.toJSON();
 
-            contentCache.items = _(contentCache.items).map(function(item) {
+            contentCache[store].items = _(contentCache[store].items).map(function(item) {
                 if (item[model.idAttribute] == modelData[model.idAttribute]) {
                     item = modelData;
                 }
@@ -190,10 +191,10 @@
         return _syncModel('saved', model, modelData, options);
     }
 
-    function _delete(model, options) {
+    function _delete(store, model, options) {
 
         var modelData = model.toJSON();
-        contentCache.items = _(contentCache.items).reject(function(item) {
+        contentCache[store].items = _(contentCache[store].items).reject(function(item) {
             return item[model.idAttribute] == model.attributes[model.idAttribute];
         });
 
@@ -222,16 +223,16 @@
 
                 switch(method) {
 
-                    case 'read'  : _read(model, options);   break;
-                    case 'create': _create(model, options); break;
-                    case 'update': _update(model, options); break;
-                    case 'delete': _delete(model, options); break;
+                    case 'read'  : _read(storeFilename, model, options);   break;
+                    case 'create': _create(storeFilename, model, options); break;
+                    case 'update': _update(storeFilename, model, options); break;
+                    case 'delete': _delete(storeFilename, model, options); break;
                 }
 
                 if (method !== 'read') {
 
                     //add current
-                    contentCache.current = contentCache.items.length;
+                    contentCache[storeFilename].current = contentCache[storeFilename].items.length;
 
                     //write to file
                     _writeToFile(storeFilename);
