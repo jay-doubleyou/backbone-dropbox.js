@@ -10,56 +10,11 @@
         throw new Error('invalid dropbox client');
     }
 
-    var _handleDropboxError = function(error) {
-
-        switch (error.status) {
-            case Dropbox.ApiError.INVALID_TOKEN:
-                alert('INVALID_TOKEN: auth again');
-            break;
-
-            case Dropbox.ApiError.NOT_FOUND:
-                alert('NOT_FOUND');
-            break;
-
-            case Dropbox.ApiError.OVER_QUOTA:
-                alert('OVER_QUOTA');
-            break;
-
-            case Dropbox.ApiError.RATE_LIMITED:
-                alert('RATE_LIMITED');
-            break;
-
-            case Dropbox.ApiError.NETWORK_ERROR:
-                alert('NETWORK_ERROR');
-                break;
-
-            case Dropbox.ApiError.INVALID_PARAM:
-                alert('INVALID_PARAM');
-                break;
-
-            case Dropbox.ApiError.OAUTH_ERROR:
-                alert('OAUTH_ERROR');
-                break;
-
-            case Dropbox.ApiError.INVALID_METHOD:
-                alert('INVALID_METHOD');
-                break;
-
-            default:
-                alert('ERROR', error.status);
-                break;
-            }
-    };
-
-    var _writeToFile = _.debounce(function(filename) {
+    var _writeToFile = _.debounce(function(filename, fileContent) {
 
         var d = $.Deferred();
-        dropboxClient.writeFile(filename, JSON.stringify(contentCache[filename]), function(error, stat) {
-
-            if (error) {
-                console.log('error writing', filename, error);
-                d.reject(error);
-            }
+        dropboxClient.writeFile(filename, JSON.stringify(fileContent), function(error, stat) {
+            if (error) d.reject(error);
             else {
                 d.resolve(stat);
             }
@@ -82,23 +37,35 @@
         opts = opts || {};
 
         var d = $.Deferred();
-        if ((opts.resetCache === void 0  ||
-            opts.resetCache === false) &&
-            contentCache[filename] !== void 0) {
+
+        if ((opts.resetCache === void 0 ||
+             opts.resetCache === false) &&
+             contentCache[filename] !== void 0) {
             d.resolve();
         } else {
 
             dropboxClient.readFile(filename, function(error, fileContent) {
-                if (error) d.reject(error);
+
+                contentCache[filename] = defaultEmptyJson;
+
+                if (error) {
+
+                    // create empty model store file if not existing
+                    if (Dropbox.ApiError.NOT_FOUND === error.status) {
+                        $.when(_writeToFile(filename, contentCache[filename]))
+                            .fail(d.reject)
+                            .done(d.resolve);
+                    }
+                    else {
+                        d.reject(error);
+                    }
+                }
+
                 else {
 
-                    var data = defaultEmptyJson;
-                    if (fileContent.length !== 0) {
-                        data = JSON.parse(fileContent);
+                    if (fileContent.length > 0) {
+                        contentCache[filename] = JSON.parse(fileContent);
                     }
-
-                    //save to cache
-                    contentCache[filename] = data;
 
                     d.resolve();
                 }
@@ -108,12 +75,8 @@
         return d;
     };
 
-    /*
-     * Trigger sync event, trigger finishing event (created, read, saved, deleted), call success callback
-     */
-    var _syncModel = function(eventName, model, items, options) {
+    var _syncModel = function(model, items, options) {
         model.trigger('sync', model, items, options);
-        model.trigger(eventName, model);
         options.success(items);
         return true;
     };
@@ -121,29 +84,23 @@
 
     function _read(store, model, options) {
 
-        // Nothing to do because no model id given.
+        // nothing to do because model has no id
         if (model instanceof Backbone.Model &&
-            model.attributes[model.idAttribute] == void 0) {
-            return _syncModel('read', model, [], options);
+            model.attributes[model.idAttribute] === void 0) {
+            return _syncModel(model, [], options);
         }
 
-        //no content
-        if (contentCache[store].current === 0) {
-            return _syncModel('read', model, [], options);
-        }
-
-        //get items
         var items = contentCache[store].items;
 
-        //handle if model is collection
+        // handle if model is collection
         if (model instanceof Backbone.Collection) {
 
-            // Apply filter
+            // apply filter
             if (options.filter != void 0) {
                 items = _(items).where(options.filter);
             }
 
-            return _syncModel('read', model, items, options);
+            return _syncModel(model, items, options);
         }
 
         var search = {}, modelId = model.attributes[model.idAttribute];
@@ -155,26 +112,17 @@
             return true;
         }
 
-        return _syncModel('read', model, item, options);
+        return _syncModel(model, item, options);
     }
 
     function _create(store, model, options) {
 
-        var new_id = contentCache[store].current;
-        var modelWithId = _.findWhere(contentCache[store].items, {
-            id : new_id
-        });
-
-        if (modelWithId !== void 0) {
-            new_id++;
-        }
-
-        model.set('id', new_id);
+        model.set(model.idAttribute, ++contentCache[store].current);
 
         var modelData = model.toJSON();
         contentCache[store].items.push(modelData);
 
-        return _syncModel('read', model, modelData, options);
+        return _syncModel(model, modelData, options);
     }
 
     function _update(store, model, options) {
@@ -188,7 +136,7 @@
                 return item;
             });
 
-        return _syncModel('saved', model, modelData, options);
+        return _syncModel(model, modelData, options);
     }
 
     function _delete(store, model, options) {
@@ -198,7 +146,7 @@
             return item[model.idAttribute] == model.attributes[model.idAttribute];
         });
 
-        return _syncModel('deleted', model, modelData, options);
+        return _syncModel(model, modelData, options);
     }
 
 
@@ -210,9 +158,7 @@
 
         options         = options           || {};
         options.success = options.success   || function() {};
-        options.error   = options.error     || function(error) {
-            console.log(error);
-        };
+        options.error   = options.error     || function() {};
 
         var storeFilename = model.store + '.json';
 
@@ -230,12 +176,7 @@
                 }
 
                 if (method !== 'read') {
-
-                    //add current
-                    contentCache[storeFilename].current = contentCache[storeFilename].items.length;
-
-                    //write to file
-                    _writeToFile(storeFilename);
+                    _writeToFile(storeFilename, contentCache[storeFilename]);
                 }
             });
     };

@@ -1,7 +1,16 @@
 backbone-dropbox.js
 ===================
 
-backbone-dropbox.js is a sync adapter for [dropbox.js](https://github.com/dropbox/dropbox-js). Using this sync, backbone will CRUD your models in a JSON file within your dropbox. This can be used for single user applications e.g. todo-list or feed reader.
+backbone-dropbox.js is a sync adapter for [dropbox.js](https://github.com/dropbox/dropbox-js). Using this sync, backbone will CRUD your models in a JSON file store in your dropbox.
+
+The backbone-dropbox adapter can be used e.g. for single user applications like a todo-list or a feed reader.
+
+Dependencies
+------------
+*   underscore.js 1.4.3
+*   backbone.js 0.9.0
+*   jQuery 1.5
+*   dropbox.js 0.9.2
 
 Usage
 -----
@@ -24,11 +33,11 @@ If your app runs inside the browser, you have to [encrypt the API key](https://d
 
 Now you have to authenticate. Therefor dropbox.js provides several [authentication methods](https://github.com/dropbox/dropbox-js/blob/master/doc/auth_drivers.md). For browser apps it's applicable to use
 
-via Redirect (user leaves your app and comes back):
+Redirect (user leaves your app and comes back):
 
     drpbxClient.authDriver(new Dropbox.Drivers.Redirect());
 
-or via Popup:
+or Popup:
 
     drpbxClient.authDriver(new Dropbox.Drivers.Popup({
         receiverUrl: "https://url.to/oauth_receiver.html",
@@ -63,8 +72,20 @@ Your models and collections will now sync with your dropbox.
         model: myModel,
         store: 'myModel'
     });
-    
-The last thing you have to do is create an empty [myModel.json](https://raw.github.com/jay-doubleyou/backbone-dropbox.js/master/myModel.json) in your app dropbox folder.
+
+
+Error handling
+--------------
+While CRUDing your backbone models/collections, errors from dropbox.js may be raised. A list of common dropbox.js [API errors](http://coffeedoc.info/github/dropbox/dropbox-js/master/classes/Dropbox/ApiError.html): 
+
+*    Dropbox.ApiError.INVALID_TOKEN
+*    Dropbox.ApiError.NOT_FOUND
+*    Dropbox.ApiError.OVER_QUOTA
+*    Dropbox.ApiError.RATE_LIMITED
+*    Dropbox.ApiError.NETWORK_ERROR
+*    Dropbox.ApiError.INVALID_PARAM
+*    Dropbox.ApiError.OAUTH_ERROR
+*    Dropbox.ApiError.INVALID_METHOD
 
 
 backbone-dropbox.js is distributed under the [MIT License](http://opensource.org/licenses/MIT).
