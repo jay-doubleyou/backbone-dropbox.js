@@ -51,10 +51,10 @@
             }
     };
 
-    var _writeToFile = function(filename, content) {
+    var _writeToFile = _.debounce(function(filename) {
 
         var d = $.Deferred();
-        dropboxClient.writeFile(filename, content, function(error, stat) {
+        dropboxClient.writeFile(filename, JSON.stringify(contentCache), function(error, stat) {
 
             if (error) {
                 console.log('error writing', filename, error);
@@ -67,23 +67,42 @@
             return true;
         });
         return d;
+    }, 600);
+
+
+    var contentCache = null;
+    var defaultEmptyJson = {
+        current:0,
+        items:[]
     };
 
-    var _readFile = function(filename) {
+
+    var _readFile = function(filename, opts) {
+
+        opts = opts || {};
 
         var d = $.Deferred();
-        dropboxClient.readFile(filename, function(error, data) {
+        if ((opts.resetCache === void 0  || opts.resetCache === false) &&
+            contentCache    !== null) {
+            d.resolve();
+        } else {
 
-            if (error) {
-                console.log('Error reading file: ' + filename, error);
-                d.reject(error);
-            }
-            else {
-                d.resolve(data);
-            }
+            dropboxClient.readFile(filename, function(error, fileContent) {
+                if (error) d.reject(error);
+                else {
 
-            return true;
-        });
+                    var data = defaultEmptyJson;
+                    if (fileContent.length !== 0) {
+                        data = JSON.parse(fileContent);
+                    }
+
+                    //save to cache
+                    contentCache = data;
+
+                    d.resolve();
+                }
+            });
+        }
 
         return d;
     };
@@ -99,118 +118,87 @@
     };
 
 
-    var readData = function(storeFilename, model, options) {
+    function _read(model, options) {
 
         // Nothing to do because no model id given.
-        if (model instanceof Backbone.Model && model.attributes[model.idAttribute] == void 0) {
+        if (model instanceof Backbone.Model &&
+            model.attributes[model.idAttribute] == void 0) {
             return _syncModel('read', model, [], options);
         }
 
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
+        //no content
+        if (contentCache.current === 0) {
+            return _syncModel('read', model, [], options);
+        }
 
-                var items = JSON.parse(data).items;
+        //get items
+        var items = contentCache.items;
 
-                if (model instanceof Backbone.Model) {
+        //handle if model is collection
+        if (model instanceof Backbone.Collection) {
 
-                    var search = {}, modelId = model.attributes[model.idAttribute];
-                    search[model.idAttribute] = modelId;
-                    var item = _(items).findWhere(search);
+            // Apply filter
+            if (options.filter != void 0) {
+                items = _(items).where(options.filter);
+            }
 
-                    if (item == void 0) {
-                        options.error('Model not found by ID ' + modelId);
-                    }
-                    else {
-                        _syncModel('read', model, item, options);
-                    }
+            return _syncModel('read', model, items, options);
+        }
 
-                    return true;
-                }
+        var search = {}, modelId = model.attributes[model.idAttribute];
+            search[model.idAttribute] = modelId;
 
-                if (model instanceof Backbone.Collection) {
+        var item = _(items).findWhere(search);
+        if (item == void 0) {
+            options.error('Model not found by ID ' + modelId);
+            return true;
+        }
 
-                    // Apply filter
-                    if (options.filter != void 0) {
-                        items = _(items).where(options.filter);
-                    }
+        return _syncModel('read', model, item, options);
+    }
 
-                    return _syncModel('read', model, items, options);
-                }
-            });
-    };
+    function _create(model, options) {
 
+        var new_id = contentCache.current;
+        var modelWithId = _.findWhere(contentCache.items, {
+            id : new_id
+        });
 
+        if (modelWithId !== void 0) {
+            new_id++;
+        }
 
-    var _create = function(model, content, options) {
-
-        model.set('id', content.items.length + 1);
-
-        var modelData = model.toJSON();
-        content.items.push(modelData);
-
-        _syncModel('read', model, modelData, options);
-
-        return content;
-    };
-
-    var _update = function(model, content, options) {
+        model.set('id', new_id);
 
         var modelData = model.toJSON();
-            content.items = _(content.items).map(function(item) {
-                if (item[model.idAttribute] == modelData[model.idAttribute]) item = modelData;
+        contentCache.items.push(modelData);
+
+        return _syncModel('read', model, modelData, options);
+    }
+
+    function _update(model, options) {
+
+        var modelData = model.toJSON();
+
+            contentCache.items = _(contentCache.items).map(function(item) {
+                if (item[model.idAttribute] == modelData[model.idAttribute]) {
+                    item = modelData;
+                }
                 return item;
             });
 
-        _syncModel('saved', model, modelData, options);
+        return _syncModel('saved', model, modelData, options);
+    }
 
-        return content;
-    };
-
-    var _delete = function(model, content, options) {
+    function _delete(model, options) {
 
         var modelData = model.toJSON();
-        content.items = _(content.items).reject(function(item) {
+        contentCache.items = _(contentCache.items).reject(function(item) {
             return item[model.idAttribute] == model.attributes[model.idAttribute];
         });
 
-        _syncModel('deleted', model, modelData, options);
-
-        return content;
-    };
-
-
-    var fileCache = null;
-
-    var que = {};
-    var executeQue = _.debounce(function(store, options) {
-
-        _readFile(store)
-            .fail(options.error)
-            .done(function(fileContent) {
-
-                fileCache = fileContent;
-
-                var content = {current:0,items:[]};
-                if (fileContent.length !== 0) {
-                    content = JSON.parse(fileContent);
-                }
-
-                var queItem;
-                while(queItem = que[store].pop()) {
-
-                    if (queItem['create'] !== void 0) content = _create(queItem['create'], content, options);
-                    if (queItem['update'] !== void 0) content = _update(queItem['update'], content, options);
-                    if (queItem['delete'] !== void 0) content = _delete(queItem['delete'], content, options);
-                }
-
-                content.current = content.items.length;
-
-                fileCache = null;
-                _writeToFile(store, JSON.stringify(content))
-                    .fail(options.error());
-            });
-    }, 600);
+        return _syncModel('deleted', model, modelData, options);
+    }
 
 
     /**
@@ -221,29 +209,33 @@
 
         options         = options           || {};
         options.success = options.success   || function() {};
+        options.error   = options.error     || function(error) {
+            console.log(error);
+        };
 
         var storeFilename = model.store + '.json';
 
-        //no nead for que if read
-        if (method === 'read') {
-            readData(storeFilename, model, options);
-            return true;
-        }
+        var that = this;
+        _readFile(storeFilename, options)
+            .fail(options.error)
+            .done(function() {
 
-        //init que data
-        if (que[storeFilename] === void 0) que[storeFilename] = [];
+                switch(method) {
 
-        //generate que item
-        var queItem = {};
-            queItem[method] = model;
+                    case 'read'  : _read(model, options);   break;
+                    case 'create': _create(model, options); break;
+                    case 'update': _update(model, options); break;
+                    case 'delete': _delete(model, options); break;
+                }
 
-        //add to que
-        que[storeFilename].push(queItem);
+                if (method !== 'read') {
 
-        // if file in cache only add to que
-        if (fileCache !== null) return true;
+                    //add current
+                    contentCache.current = contentCache.items.length;
 
-        //handle que values
-        executeQue(storeFilename, options);
+                    //write to file
+                    _writeToFile(storeFilename);
+                }
+            });
     };
 };
