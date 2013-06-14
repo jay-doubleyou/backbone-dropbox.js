@@ -98,7 +98,7 @@
         return true;
     };
 
-    // read data
+
     var readData = function(storeFilename, model, options) {
 
         // Nothing to do because no model id given.
@@ -140,84 +140,78 @@
             });
     };
 
-    //create new entries
-    var createData = function(storeFilename, model, options) {
+
+
+    var _create = function(model, content, options) {
+
+        model.set('id', content.items.length + 1);
 
         var modelData = model.toJSON();
-        console.log('create modelData', modelData);
+        content.items.push(modelData);
 
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
+        _syncModel('read', model, modelData, options);
 
-                data = JSON.parse(data);
-
-                data.current++;
-                modelData[model.idAttribute] = data.current;
-                data.items.push(modelData);
-
-                _writeToFile(storeFilename, JSON.stringify(data))
-                    .fail(options.error)
-                    .done(function() {
-                        model.attributes[model.idAttribute] = data.current;
-                        return _syncModel('read', model, modelData, options);
-                    });
-            });
+        return content;
     };
 
-    //update existing entries
-    var updateData = function(storeFilename, model, options) {
+    var _update = function(model, content, options) {
 
         var modelData = model.toJSON();
-
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
-
-                data = JSON.parse(data);
-                data.items = _(data.items).map(function(item) {
-
-                    if (item[model.idAttribute] == modelData[model.idAttribute]) {
-                        item = modelData;
-                    }
-
-                    return item;
-                });
-
-                _writeToFile(storeFilename, JSON.stringify(data))
-                    .fail(options.error)
-                    .done(function() {
-                        return _syncModel('saved', model, modelData, options);
-                    });
+            content.items = _(content.items).map(function(item) {
+                if (item[model.idAttribute] == modelData[model.idAttribute]) item = modelData;
+                return item;
             });
+
+        _syncModel('saved', model, modelData, options);
+
+        return content;
     };
 
-    //delete existing entries
-    var deleteData = function(storeFilename, model, options) {
+    var _delete = function(model, content, options) {
 
-        // Nothing to do because empty model given.
-        if (model instanceof Backbone.Model && model.attributes[model.idAttribute] == void 0) {
-            return _syncModel('deleted', model, [], options);
-        }
+        var modelData = model.toJSON();
+        content.items = _(content.items).reject(function(item) {
+            return item[model.idAttribute] == model.attributes[model.idAttribute];
+        });
 
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
+        _syncModel('deleted', model, modelData, options);
 
-                var modelData = model.toJSON();
-
-                data = JSON.parse(data);
-                data.items = _(data.items).reject(function(item) {
-                    return item[model.idAttribute] == model.attributes[model.idAttribute];
-                });
-
-                _writeToFile(storeFilename, JSON.stringify(data))
-                    .fail(options.error)
-                    .done(function() {
-                        return _syncModel('deleted', model, modelData, options);
-                    });
-            });
+        return content;
     };
+
+
+    var fileCache = null;
+
+    var que = {};
+    var executeQue = _.debounce(function(store, options) {
+
+        _readFile(store)
+            .fail(options.error)
+            .done(function(fileContent) {
+
+                fileCache = fileContent;
+
+                var content = {current:0,items:[]};
+                if (fileContent.length !== 0) {
+                    content = JSON.parse(fileContent);
+                }
+
+                var queItem;
+                while(queItem = que[store].pop()) {
+
+                    if (queItem['create'] !== void 0) content = _create(queItem['create'], content, options);
+                    if (queItem['update'] !== void 0) content = _update(queItem['update'], content, options);
+                    if (queItem['delete'] !== void 0) content = _delete(queItem['delete'], content, options);
+                }
+
+                content.current = content.items.length;
+
+                fileCache = null;
+                _writeToFile(store, JSON.stringify(content))
+                    .fail(options.error());
+            });
+    }, 600);
+
 
     /**
      * sync method
@@ -230,11 +224,26 @@
 
         var storeFilename = model.store + '.json';
 
-        switch (method) {
-            case 'read'  :  readData  (storeFilename, model, options);   break;
-            case 'create':  createData(storeFilename, model, options);   break;
-            case 'update':  updateData(storeFilename, model, options);   break;
-            case 'delete':  deleteData(storeFilename, model, options);   break;
+        //no nead for que if read
+        if (method === 'read') {
+            readData(storeFilename, model, options);
+            return true;
         }
+
+        //init que data
+        if (que[storeFilename] === void 0) que[storeFilename] = [];
+
+        //generate que item
+        var queItem = {};
+            queItem[method] = model;
+
+        //add to que
+        que[storeFilename].push(queItem);
+
+        // if file in cache only add to que
+        if (fileCache !== null) return true;
+
+        //handle que values
+        executeQue(storeFilename, options);
     };
 };
