@@ -10,56 +10,11 @@
         throw new Error('invalid dropbox client');
     }
 
-    var _handleDropboxError = function(error) {
-
-        switch (error.status) {
-            case Dropbox.ApiError.INVALID_TOKEN:
-                alert('INVALID_TOKEN: auth again');
-            break;
-
-            case Dropbox.ApiError.NOT_FOUND:
-                alert('NOT_FOUND');
-            break;
-
-            case Dropbox.ApiError.OVER_QUOTA:
-                alert('OVER_QUOTA');
-            break;
-
-            case Dropbox.ApiError.RATE_LIMITED:
-                alert('RATE_LIMITED');
-            break;
-
-            case Dropbox.ApiError.NETWORK_ERROR:
-                alert('NETWORK_ERROR');
-                break;
-
-            case Dropbox.ApiError.INVALID_PARAM:
-                alert('INVALID_PARAM');
-                break;
-
-            case Dropbox.ApiError.OAUTH_ERROR:
-                alert('OAUTH_ERROR');
-                break;
-
-            case Dropbox.ApiError.INVALID_METHOD:
-                alert('INVALID_METHOD');
-                break;
-
-            default:
-                alert('ERROR', error.status);
-                break;
-            }
-    };
-
     var _writeToFile = _.debounce(function(filename) {
 
         var d = $.Deferred();
         dropboxClient.writeFile(filename, JSON.stringify(contentCache[filename]), function(error, stat) {
-
-            if (error) {
-                console.log('error writing', filename, error);
-                d.reject(error);
-            }
+            if (error) d.reject(error);
             else {
                 d.resolve(stat);
             }
@@ -197,9 +152,7 @@
 
         options         = options           || {};
         options.success = options.success   || function() {};
-        options.error   = options.error     || function(error) {
-            console.log(error);
-        };
+        options.error   = options.error     || function() {};
 
         var storeFilename = model.store + '.json';
 
