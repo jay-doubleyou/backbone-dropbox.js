@@ -92,13 +92,10 @@
                 if (error) d.reject(error);
                 else {
 
-                    var data = defaultEmptyJson;
-                    if (fileContent.length !== 0) {
-                        data = JSON.parse(fileContent);
+                    contentCache[filename] = defaultEmptyJson;
+                    if (fileContent.length > 0) {
+                        contentCache[filename] = JSON.parse(fileContent);
                     }
-
-                    //save to cache
-                    contentCache[filename] = data;
 
                     d.resolve();
                 }
@@ -121,24 +118,23 @@
 
     function _read(store, model, options) {
 
-        // Nothing to do because no model id given.
+        // nothing to do because model has no id
         if (model instanceof Backbone.Model &&
             model.attributes[model.idAttribute] == void 0) {
             return _syncModel('read', model, [], options);
         }
 
-        //no content
+        // no content
         if (contentCache[store].current === 0) {
             return _syncModel('read', model, [], options);
         }
 
-        //get items
         var items = contentCache[store].items;
 
-        //handle if model is collection
+        // handle if model is collection
         if (model instanceof Backbone.Collection) {
 
-            // Apply filter
+            // apply filter
             if (options.filter != void 0) {
                 items = _(items).where(options.filter);
             }
@@ -160,16 +156,7 @@
 
     function _create(store, model, options) {
 
-        var new_id = contentCache[store].current;
-        var modelWithId = _.findWhere(contentCache[store].items, {
-            id : new_id
-        });
-
-        if (modelWithId !== void 0) {
-            new_id++;
-        }
-
-        model.set('id', new_id);
+        model.set(model.idAttribute, ++contentCache[store].current);
 
         var modelData = model.toJSON();
         contentCache[store].items.push(modelData);
@@ -230,11 +217,6 @@
                 }
 
                 if (method !== 'read') {
-
-                    //add current
-                    contentCache[storeFilename].current = contentCache[storeFilename].items.length;
-
-                    //write to file
                     _writeToFile(storeFilename);
                 }
             });
