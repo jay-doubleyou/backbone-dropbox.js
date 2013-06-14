@@ -1,7 +1,16 @@
 backbone-dropbox.js
 ===================
 
-backbone-dropbox.js is a sync adapter for [dropbox.js](https://github.com/dropbox/dropbox-js). Using this sync, backbone will CRUD your models in a JSON file within your dropbox. This can be used for single user applications e.g. todo-list or feed reader.
+backbone-dropbox.js is a sync adapter for [dropbox.js](https://github.com/dropbox/dropbox-js). Using this sync, backbone will CRUD your models in a JSON file store in your dropbox.
+
+The backbone-dropbox adapter can be used e.g. for single user applications like a todo-list or a feed reader.
+
+Dependencies
+------------
+*   underscore.js 1.4.3
+*   backbone.js 0.9.0
+*   jQuery 1.5
+*   dropbox.js 0.9.2
 
 Usage
 -----
@@ -63,8 +72,7 @@ Your models and collections will now sync with your dropbox.
         model: myModel,
         store: 'myModel'
     });
-    
-The last thing you have to do is create an empty [myModel.json](https://raw.github.com/jay-doubleyou/backbone-dropbox.js/master/myModel.json) in your app dropbox folder.
+
 
 Error handling
 --------------
