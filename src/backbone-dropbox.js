@@ -10,10 +10,10 @@
         throw new Error('invalid dropbox client');
     }
 
-    var _writeToFile = _.debounce(function(filename) {
+    var _writeToFile = _.debounce(function(filename, fileContent) {
 
         var d = $.Deferred();
-        dropboxClient.writeFile(filename, JSON.stringify(contentCache[filename]), function(error, stat) {
+        dropboxClient.writeFile(filename, JSON.stringify(fileContent), function(error, stat) {
             if (error) d.reject(error);
             else {
                 d.resolve(stat);
@@ -37,17 +37,32 @@
         opts = opts || {};
 
         var d = $.Deferred();
-        if ((opts.resetCache === void 0  ||
-            opts.resetCache === false) &&
-            contentCache[filename] !== void 0) {
+
+        if ((opts.resetCache === void 0 ||
+             opts.resetCache === false) &&
+             contentCache[filename] !== void 0) {
             d.resolve();
         } else {
 
             dropboxClient.readFile(filename, function(error, fileContent) {
-                if (error) d.reject(error);
+
+                contentCache[filename] = defaultEmptyJson;
+
+                if (error) {
+
+                    // create empty model store file if not existing
+                    if (Dropbox.ApiError.NOT_FOUND === error.status) {
+                        $.when(_writeToFile(filename, contentCache[filename]))
+                            .fail(d.reject)
+                            .done(d.resolve);
+                    }
+                    else {
+                        d.reject(error);
+                    }
+                }
+
                 else {
 
-                    contentCache[filename] = defaultEmptyJson;
                     if (fileContent.length > 0) {
                         contentCache[filename] = JSON.parse(fileContent);
                     }
@@ -71,12 +86,7 @@
 
         // nothing to do because model has no id
         if (model instanceof Backbone.Model &&
-            model.attributes[model.idAttribute] == void 0) {
-            return _syncModel(model, [], options);
-        }
-
-        // no content
-        if (contentCache[store].current === 0) {
+            model.attributes[model.idAttribute] === void 0) {
             return _syncModel(model, [], options);
         }
 
@@ -166,7 +176,7 @@
                 }
 
                 if (method !== 'read') {
-                    _writeToFile(storeFilename);
+                    _writeToFile(storeFilename, contentCache[storeFilename]);
                 }
             });
     };
