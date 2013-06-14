@@ -66,5 +66,18 @@ Your models and collections will now sync with your dropbox.
     
 The last thing you have to do is create an empty [myModel.json](https://raw.github.com/jay-doubleyou/backbone-dropbox.js/master/myModel.json) in your app dropbox folder.
 
+Error handling
+--------------
+While CRUDing your backbone models/collections, errors from dropbox.js may be raised. A list of common dropbox.js [API errors](http://coffeedoc.info/github/dropbox/dropbox-js/master/classes/Dropbox/ApiError.html): 
+
+*    Dropbox.ApiError.INVALID_TOKEN
+*    Dropbox.ApiError.NOT_FOUND
+*    Dropbox.ApiError.OVER_QUOTA
+*    Dropbox.ApiError.RATE_LIMITED
+*    Dropbox.ApiError.NETWORK_ERROR
+*    Dropbox.ApiError.INVALID_PARAM
+*    Dropbox.ApiError.OAUTH_ERROR
+*    Dropbox.ApiError.INVALID_METHOD
+
 
 backbone-dropbox.js is distributed under the [MIT License](http://opensource.org/licenses/MIT).
