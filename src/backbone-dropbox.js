@@ -60,12 +60,8 @@
         return d;
     };
 
-    /*
-     * Trigger sync event, trigger finishing event (created, read, saved, deleted), call success callback
-     */
-    var _syncModel = function(eventName, model, items, options) {
+    var _syncModel = function(model, items, options) {
         model.trigger('sync', model, items, options);
-        model.trigger(eventName, model);
         options.success(items);
         return true;
     };
@@ -76,12 +72,12 @@
         // nothing to do because model has no id
         if (model instanceof Backbone.Model &&
             model.attributes[model.idAttribute] == void 0) {
-            return _syncModel('read', model, [], options);
+            return _syncModel(model, [], options);
         }
 
         // no content
         if (contentCache[store].current === 0) {
-            return _syncModel('read', model, [], options);
+            return _syncModel(model, [], options);
         }
 
         var items = contentCache[store].items;
@@ -94,7 +90,7 @@
                 items = _(items).where(options.filter);
             }
 
-            return _syncModel('read', model, items, options);
+            return _syncModel(model, items, options);
         }
 
         var search = {}, modelId = model.attributes[model.idAttribute];
@@ -106,7 +102,7 @@
             return true;
         }
 
-        return _syncModel('read', model, item, options);
+        return _syncModel(model, item, options);
     }
 
     function _create(store, model, options) {
@@ -116,7 +112,7 @@
         var modelData = model.toJSON();
         contentCache[store].items.push(modelData);
 
-        return _syncModel('created', model, modelData, options);
+        return _syncModel(model, modelData, options);
     }
 
     function _update(store, model, options) {
@@ -130,7 +126,7 @@
                 return item;
             });
 
-        return _syncModel('saved', model, modelData, options);
+        return _syncModel(model, modelData, options);
     }
 
     function _delete(store, model, options) {
@@ -140,7 +136,7 @@
             return item[model.idAttribute] == model.attributes[model.idAttribute];
         });
 
-        return _syncModel('deleted', model, modelData, options);
+        return _syncModel(model, modelData, options);
     }
 
 
