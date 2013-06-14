@@ -51,10 +51,10 @@
             }
     };
 
-    var _writeToFile = function(filename, content) {
+    var _writeToFile = _.debounce(function(filename) {
 
         var d = $.Deferred();
-        dropboxClient.writeFile(filename, content, function(error, stat) {
+        dropboxClient.writeFile(filename, JSON.stringify(contentCache[filename]), function(error, stat) {
 
             if (error) {
                 console.log('error writing', filename, error);
@@ -67,23 +67,43 @@
             return true;
         });
         return d;
+    }, 600);
+
+
+    var contentCache = [];
+    var defaultEmptyJson = {
+        current:0,
+        items:[]
     };
 
-    var _readFile = function(filename) {
+
+    var _readFile = function(filename, opts) {
+
+        opts = opts || {};
 
         var d = $.Deferred();
-        dropboxClient.readFile(filename, function(error, data) {
+        if ((opts.resetCache === void 0  ||
+            opts.resetCache === false) &&
+            contentCache[filename] !== void 0) {
+            d.resolve();
+        } else {
 
-            if (error) {
-                console.log('Error reading file: ' + filename, error);
-                d.reject(error);
-            }
-            else {
-                d.resolve(data);
-            }
+            dropboxClient.readFile(filename, function(error, fileContent) {
+                if (error) d.reject(error);
+                else {
 
-            return true;
-        });
+                    var data = defaultEmptyJson;
+                    if (fileContent.length !== 0) {
+                        data = JSON.parse(fileContent);
+                    }
+
+                    //save to cache
+                    contentCache[filename] = data;
+
+                    d.resolve();
+                }
+            });
+        }
 
         return d;
     };
@@ -98,126 +118,89 @@
         return true;
     };
 
-    // read data
-    var readData = function(storeFilename, model, options) {
+
+    function _read(store, model, options) {
 
         // Nothing to do because no model id given.
-        if (model instanceof Backbone.Model && model.attributes[model.idAttribute] == void 0) {
+        if (model instanceof Backbone.Model &&
+            model.attributes[model.idAttribute] == void 0) {
             return _syncModel('read', model, [], options);
         }
 
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
-
-                var items = JSON.parse(data).items;
-
-                if (model instanceof Backbone.Model) {
-
-                    var search = {}, modelId = model.attributes[model.idAttribute];
-                    search[model.idAttribute] = modelId;
-                    var item = _(items).findWhere(search);
-
-                    if (item == void 0) {
-                        options.error('Model not found by ID ' + modelId);
-                    }
-                    else {
-                        _syncModel('read', model, item, options);
-                    }
-
-                    return true;
-                }
-
-                if (model instanceof Backbone.Collection) {
-
-                    // Apply filter
-                    if (options.filter != void 0) {
-                        items = _(items).where(options.filter);
-                    }
-
-                    return _syncModel('read', model, items, options);
-                }
-            });
-    };
-
-    //create new entries
-    var createData = function(storeFilename, model, options) {
-
-        var modelData = model.toJSON();
-        console.log('create modelData', modelData);
-
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
-
-                data = JSON.parse(data);
-
-                data.current++;
-                modelData[model.idAttribute] = data.current;
-                data.items.push(modelData);
-
-                _writeToFile(storeFilename, JSON.stringify(data))
-                    .fail(options.error)
-                    .done(function() {
-                        model.attributes[model.idAttribute] = data.current;
-                        return _syncModel('read', model, modelData, options);
-                    });
-            });
-    };
-
-    //update existing entries
-    var updateData = function(storeFilename, model, options) {
-
-        var modelData = model.toJSON();
-
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
-
-                data = JSON.parse(data);
-                data.items = _(data.items).map(function(item) {
-
-                    if (item[model.idAttribute] == modelData[model.idAttribute]) {
-                        item = modelData;
-                    }
-
-                    return item;
-                });
-
-                _writeToFile(storeFilename, JSON.stringify(data))
-                    .fail(options.error)
-                    .done(function() {
-                        return _syncModel('saved', model, modelData, options);
-                    });
-            });
-    };
-
-    //delete existing entries
-    var deleteData = function(storeFilename, model, options) {
-
-        // Nothing to do because empty model given.
-        if (model instanceof Backbone.Model && model.attributes[model.idAttribute] == void 0) {
-            return _syncModel('deleted', model, [], options);
+        //no content
+        if (contentCache[store].current === 0) {
+            return _syncModel('read', model, [], options);
         }
 
-        _readFile(storeFilename)
-            .fail(options.error)
-            .done(function(data) {
+        //get items
+        var items = contentCache[store].items;
 
-                var modelData = model.toJSON();
+        //handle if model is collection
+        if (model instanceof Backbone.Collection) {
 
-                data = JSON.parse(data);
-                data.items = _(data.items).reject(function(item) {
-                    return item[model.idAttribute] == model.attributes[model.idAttribute];
-                });
+            // Apply filter
+            if (options.filter != void 0) {
+                items = _(items).where(options.filter);
+            }
 
-                _writeToFile(storeFilename, JSON.stringify(data))
-                    .fail(options.error)
-                    .done(function() {
-                        return _syncModel('deleted', model, modelData, options);
-                    });
+            return _syncModel('read', model, items, options);
+        }
+
+        var search = {}, modelId = model.attributes[model.idAttribute];
+            search[model.idAttribute] = modelId;
+
+        var item = _(items).findWhere(search);
+        if (item == void 0) {
+            options.error('Model not found by ID ' + modelId);
+            return true;
+        }
+
+        return _syncModel('read', model, item, options);
+    }
+
+    function _create(store, model, options) {
+
+        var new_id = contentCache[store].current;
+        var modelWithId = _.findWhere(contentCache[store].items, {
+            id : new_id
+        });
+
+        if (modelWithId !== void 0) {
+            new_id++;
+        }
+
+        model.set('id', new_id);
+
+        var modelData = model.toJSON();
+        contentCache[store].items.push(modelData);
+
+        return _syncModel('read', model, modelData, options);
+    }
+
+    function _update(store, model, options) {
+
+        var modelData = model.toJSON();
+
+            contentCache[store].items = _(contentCache[store].items).map(function(item) {
+                if (item[model.idAttribute] == modelData[model.idAttribute]) {
+                    item = modelData;
+                }
+                return item;
             });
-    };
+
+        return _syncModel('saved', model, modelData, options);
+    }
+
+    function _delete(store, model, options) {
+
+        var modelData = model.toJSON();
+        contentCache[store].items = _(contentCache[store].items).reject(function(item) {
+            return item[model.idAttribute] == model.attributes[model.idAttribute];
+        });
+
+        return _syncModel('deleted', model, modelData, options);
+    }
+
 
     /**
      * sync method
@@ -227,14 +210,33 @@
 
         options         = options           || {};
         options.success = options.success   || function() {};
+        options.error   = options.error     || function(error) {
+            console.log(error);
+        };
 
         var storeFilename = model.store + '.json';
 
-        switch (method) {
-            case 'read'  :  readData  (storeFilename, model, options);   break;
-            case 'create':  createData(storeFilename, model, options);   break;
-            case 'update':  updateData(storeFilename, model, options);   break;
-            case 'delete':  deleteData(storeFilename, model, options);   break;
-        }
+        var that = this;
+        _readFile(storeFilename, options)
+            .fail(options.error)
+            .done(function() {
+
+                switch(method) {
+
+                    case 'read'  : _read(storeFilename, model, options);   break;
+                    case 'create': _create(storeFilename, model, options); break;
+                    case 'update': _update(storeFilename, model, options); break;
+                    case 'delete': _delete(storeFilename, model, options); break;
+                }
+
+                if (method !== 'read') {
+
+                    //add current
+                    contentCache[storeFilename].current = contentCache[storeFilename].items.length;
+
+                    //write to file
+                    _writeToFile(storeFilename);
+                }
+            });
     };
 };
