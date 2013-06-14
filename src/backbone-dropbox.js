@@ -116,7 +116,7 @@
         var modelData = model.toJSON();
         contentCache[store].items.push(modelData);
 
-        return _syncModel('read', model, modelData, options);
+        return _syncModel('created', model, modelData, options);
     }
 
     function _update(store, model, options) {
