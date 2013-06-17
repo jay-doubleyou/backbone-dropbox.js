@@ -27,7 +27,7 @@ Create the dropbox client:
         key: 'YOUR_ENCRYPTED_API_KEY', sandbox: true|false
     });
     
-You can create your API key [Dropbox App Console](https://www.dropbox.com/developers/apps).
+You can create your API key via [Dropbox App Console](https://www.dropbox.com/developers/apps).
 
 If your app runs inside the browser, you have to [encrypt the API key](https://dl-web.dropbox.com/spa/pjlfdak1tmznswp/api_keys.js/public/index.html).
 
