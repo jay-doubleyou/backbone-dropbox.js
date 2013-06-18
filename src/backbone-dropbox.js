@@ -10,7 +10,9 @@
         throw new Error('invalid dropbox client');
     }
 
-    var _writeToFile = _.debounce(function(filename, fileContent) {
+    var contentCache = [];
+
+    var _writeToFile = function(filename, fileContent) {
 
         var d = $.Deferred();
         dropboxClient.writeFile(filename, JSON.stringify(fileContent), function(error, stat) {
@@ -22,14 +24,9 @@
             return true;
         });
         return d;
-    }, 600);
-
-
-    var contentCache = [];
-    var defaultEmptyJson = {
-        current:0,
-        items:[]
     };
+
+    var _writeToFileDebounced = _.debounce(_writeToFile, 600);
 
 
     var _readFile = function(filename, opts) {
@@ -46,7 +43,11 @@
 
             dropboxClient.readFile(filename, function(error, fileContent) {
 
-                contentCache[filename] = defaultEmptyJson;
+                //extend and clear
+                contentCache[filename] = {
+                    current:0,
+                    items:[]
+                };
 
                 if (error) {
 
@@ -116,7 +117,6 @@
     }
 
     function _create(store, model, options) {
-
         model.set(model.idAttribute, ++contentCache[store].current);
 
         var modelData = model.toJSON();
@@ -168,7 +168,6 @@
             .done(function() {
 
                 switch(method) {
-
                     case 'read'  : _read(storeFilename, model, options);   break;
                     case 'create': _create(storeFilename, model, options); break;
                     case 'update': _update(storeFilename, model, options); break;
@@ -176,7 +175,7 @@
                 }
 
                 if (method !== 'read') {
-                    _writeToFile(storeFilename, contentCache[storeFilename]);
+                    _writeToFileDebounced(storeFilename, contentCache[storeFilename]);
                 }
             });
     };
