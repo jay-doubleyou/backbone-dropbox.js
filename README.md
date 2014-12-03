@@ -9,7 +9,6 @@ Dependencies
 ------------
 *   underscore.js 1.4.3
 *   backbone.js 0.9.0
-*   jQuery 1.5
 *   dropbox.js 0.9.2
 
 Usage
